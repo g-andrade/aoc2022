@@ -1,11 +1,11 @@
 @ vim:ft=armv5
-        .global _start
-        .func _start
+		.global _start
+		.func _start
 
 /* Raspberry PI ARM assembly */
 
 _start:
-    PUSH {IP, LR}
+	PUSH {IP, LR}
 _get_line:
 	PUSH {R0-R2}
 	LDR R0, =last_input_line
@@ -59,7 +59,7 @@ _finished:
 	POP {R0-R1}
 	MOV R0, #0 @ success exit code
 _exit:
-    POP {IP, LR}
+	POP {IP, LR}
  	MOV R7, #1			@ setup registers for syscall exit
  	SWI 0				@ execute syscall exit
 _log_number_scanned:
