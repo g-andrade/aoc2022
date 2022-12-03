@@ -98,7 +98,7 @@ _finish_getting_item_priority:
  	POP {R1-R3, LR}
  	BX LR
 
-_update_bitset: // low, high and new bit index in R0, R1 and R2, respectively
+_update_bitset:
  	PUSH {R0-R3, LR}
 	CMP R0, #32
 	BGE _update_high_bitset
