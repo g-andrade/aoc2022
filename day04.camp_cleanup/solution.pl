@@ -65,8 +65,6 @@ range_overlaps([LeftMin, LeftMax], [RightMin, _RightMax]) :-
 main([InputFilenameAtom, OverlapType]) :-
     atom_codes(InputFilenameAtom, InputFilename),
     assignments(Assignments, InputFilename),
-    % first(Assignments, First),
-    % Count is count_thing(Assignments),
     convlist([X,X]>>assignment_contains_another(X, OverlapType), Assignments,
              OverlappingAssignments),
     length(OverlappingAssignments, Count),
