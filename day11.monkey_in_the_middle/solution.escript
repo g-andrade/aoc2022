@@ -10,28 +10,37 @@
     throw_to_monkey_nr_if_false :: integer()
 }).
 
+-record(tweaks, {
+    bored_divide_by :: pos_integer(),
+    common_divisors_multiplied :: pos_integer()
+}).
+
 -type worry_level() :: integer().
 -type operation_fun() :: fun ((worry_level()) -> worry_level()).
 
 main(["part1"]) ->
-    do_part1(_NrOfRounds = 20, _BoredDivideBy = 3);
+    do(_NrOfRounds = 20, _BoredDivideBy = 3);
 main(["part2"]) ->
-    % do_part1(_NrOfRounds = 10_000, _BoredDivideBy = 1).
-    todo.
+    do(_NrOfRounds = 10_000, _BoredDivideBy = 1).
 
-do_part1(NrOfRounds, BoredDivideBy) ->
+do(NrOfRounds, BoredDivideBy) ->
     Input = read_input(),
     InitialMonkeys = parse_monkeys(Input),
     log("Initial monkeys: ~p", [InitialMonkeys]),
 
+    CommonDivisors = [Monkey#monkey.divisible_by || Monkey <- maps:values(InitialMonkeys)],
+    CommonDivisorsMultiplied = lists:foldl(fun erlang:'*'/2, 1, CommonDivisors),
+    Tweaks = #tweaks{bored_divide_by = BoredDivideBy,
+                     common_divisors_multiplied = CommonDivisorsMultiplied},
+
     {InspectionCounts, FinalMonkeys}
-        = do_part1_rounds(
+        = do_rounds(
             fun (MonkeyNr, Acc) ->
                     update_counter(MonkeyNr, +1, Acc)
             end,
             _InspectionCountsAcc0 = #{},
-            BoredDivideBy,
-            NrOfRounds, 
+            Tweaks,
+            NrOfRounds,
             InitialMonkeys),
 
     log("Final monkeys: ~p", [FinalMonkeys]),
@@ -80,7 +89,7 @@ parse_monkey(Text) ->
                              <<"if_false_monkey_nr">>
                   ], binary}]),
 
-    [RawMonkeyNr, RawStartingItems, RawOperation, RawDivisibleBy, 
+    [RawMonkeyNr, RawStartingItems, RawOperation, RawDivisibleBy,
      RawIfTrueMonkeyNr, RawIfFalseMonkeyNr] = Match,
 
     #monkey{nr = binary_to_integer(RawMonkeyNr),
@@ -111,28 +120,30 @@ parse_operator(RawOperation) ->
                              <<"*">> => fun erlang:'*'/2,
                              <<"/">> => fun erlang:'div'/2}).
 
-do_part1_rounds(Fun, Acc, BoredDivideBy, Amount, Monkeys) when Amount > 0 ->
-    log("~b round(s) left: ~p", [Amount, Monkeys]),
-    {UpdatedAcc, UpdatedMonkeys} = do_part1_round(Fun, Acc, BoredDivideBy, Monkeys),
-    do_part1_rounds(Fun, UpdatedAcc, BoredDivideBy, Amount - 1, UpdatedMonkeys);
-do_part1_rounds(_Fun, Acc, _BoredDivideBy, Amount, Monkeys) when Amount =:= 0 ->
+do_rounds(Fun, Acc, Tweaks, Amount, Monkeys) when Amount > 0 ->
+    % log("~b round(s) left: ~p", [Amount, Monkeys]),
+    log("~b round(s) left", [Amount]),
+    {UpdatedAcc, UpdatedMonkeys} = do_round(Fun, Acc, Tweaks, Monkeys),
+    do_rounds(Fun, UpdatedAcc, Tweaks, Amount - 1, UpdatedMonkeys);
+do_rounds(_Fun, Acc, _Tweaks, Amount, Monkeys) when Amount =:= 0 ->
     {Acc, Monkeys}.
 
-do_part1_round(Fun, Acc, BoredDivideBy, Monkeys) ->
-    do_part1_round_recur(Fun, Acc, BoredDivideBy, _MonkeyNr = 0, Monkeys).
+do_round(Fun, Acc, Tweaks, Monkeys) ->
+    do_round_recur(Fun, Acc, Tweaks, _MonkeyNr = 0, Monkeys).
 
-do_part1_round_recur(Fun, Acc, BoredDivideBy, MonkeyNr, Monkeys) when MonkeyNr < map_size(Monkeys) ->
+do_round_recur(Fun, Acc, Tweaks, MonkeyNr, Monkeys) when MonkeyNr < map_size(Monkeys) ->
     Monkey = maps:get(MonkeyNr, Monkeys),
-    try 
+    try
         WorryLevel = queue:head(Monkey#monkey.items),
         IncreasedWorryLevel = (Monkey#monkey.operation)(WorryLevel),
-        BoredWorryLevel = IncreasedWorryLevel div BoredDivideBy,
+        BoredWorryLevel = IncreasedWorryLevel div Tweaks#tweaks.bored_divide_by,
+        RestrictedWorryLevel = BoredWorryLevel rem Tweaks#tweaks.common_divisors_multiplied,
         ThrowToMonkey
-            = case BoredWorryLevel rem Monkey#monkey.divisible_by of
+            = case RestrictedWorryLevel rem Monkey#monkey.divisible_by of
                   0 -> Monkey#monkey.throw_to_monkey_nr_if_true;
                   _ -> Monkey#monkey.throw_to_monkey_nr_if_false
               end,
-        MonkeysAfterThrow = throw_to_monkey(ThrowToMonkey, BoredWorryLevel, Monkeys),
+        MonkeysAfterThrow = throw_to_monkey(ThrowToMonkey, RestrictedWorryLevel, Monkeys),
 
         % log("Monkey ~b got worry level ~b, increased it to ~b, bored it became ~b,"
         %     " threw it to monkey ~b",
@@ -141,12 +152,12 @@ do_part1_round_recur(Fun, Acc, BoredDivideBy, MonkeyNr, Monkeys) when MonkeyNr <
         UpdatedMonkey = Monkey#monkey{items = queue:drop(Monkey#monkey.items)},
         UpdatedMonkeys = maps:update(MonkeyNr, UpdatedMonkey, MonkeysAfterThrow),
         UpdatedAcc = Fun(MonkeyNr, Acc),
-        do_part1_round_recur(Fun, UpdatedAcc, BoredDivideBy, MonkeyNr, UpdatedMonkeys)
+        do_round_recur(Fun, UpdatedAcc, Tweaks, MonkeyNr, UpdatedMonkeys)
     catch
         error:empty ->
-            do_part1_round_recur(Fun, Acc, BoredDivideBy, MonkeyNr + 1, Monkeys)
+            do_round_recur(Fun, Acc, Tweaks, MonkeyNr + 1, Monkeys)
     end;
-do_part1_round_recur(_Fun, Acc, _BoredDivideBy, MonkeyNr, Monkeys) when MonkeyNr =:= map_size(Monkeys) ->
+do_round_recur(_Fun, Acc, _Tweaks, MonkeyNr, Monkeys) when MonkeyNr =:= map_size(Monkeys) ->
     {Acc, Monkeys}.
 
 throw_to_monkey(ThrowToMonkey, BoredWorryLevel, Monkeys) ->
