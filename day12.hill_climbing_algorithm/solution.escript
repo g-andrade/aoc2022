@@ -7,9 +7,11 @@
 }).
 
 main(["part1"]) ->
-    do().
+    do([start]);
+main(["part2"]) ->
+    do([start, 0]).
 
-do() ->
+do(AcceptableStarts) ->
     Matrix = parse_input(),
     log("Matrix: ~p", [Matrix]),
 
@@ -18,11 +20,30 @@ do() ->
         VertexPerPos ->
             log("Graph info: ~p", [digraph:info(Graph)]),
 
-            #{start := StartPos, 'end' := EndPos} = get_start_and_end_positions(Matrix),
-            StartVertex = maps:get(StartPos, VertexPerPos),
-            EndVertex = maps:get(EndPos, VertexPerPos),
-            [_|_] = ShortestPath = digraph:get_short_path(Graph, StartVertex, EndVertex),
+            #{start := StartPositions, 'end' := [EndPos]}
+                = get_start_and_end_positions(AcceptableStarts, Matrix),
 
+            do_(Graph, StartPositions, EndPos, VertexPerPos)
+    after
+        digraph:delete(Graph)
+    end.
+
+do_(Graph, StartPositions, EndPos, VertexPerPos) ->
+    ShortestNrOfSteps = lists:foldl(
+      fun (StartPos, PrevMin) ->
+              min(PrevMin, do_for_starting_pos(Graph, StartPos, EndPos, VertexPerPos))
+      end,
+      infinity,
+      StartPositions),
+
+    log("Shortest nr of steps: ~b", [ShortestNrOfSteps]).
+
+do_for_starting_pos(Graph, StartPos, EndPos, VertexPerPos) ->
+    StartVertex = maps:get(StartPos, VertexPerPos),
+    EndVertex = maps:get(EndPos, VertexPerPos),
+
+    case digraph:get_short_path(Graph, StartVertex, EndVertex) of
+        [_|_] = ShortestPath ->
             ShortestPathPositions
                 = lists:map(
                     fun (Vertex) ->
@@ -31,10 +52,14 @@ do() ->
                     end,
                     ShortestPath),
 
-            log("Shorted path: ~p", [ShortestPathPositions]),
-            log("Shorted path nr of steps: ~b", [length(ShortestPath) - 1])
-    after
-        digraph:delete(Graph)
+            % log("Candidate shortest path: ~p", [ShortestPathPositions]),
+            % log("Candidate shortest path nr of steps: ~b", [length(ShortestPath) - 1]),
+            % log("----------", []),
+
+            length(ShortestPath) - 1;
+
+        false ->
+            infinity
     end.
 
 parse_input() ->
@@ -60,28 +85,38 @@ parse_line(Line) ->
         end,
         Chars)).
 
-get_start_and_end_positions(Matrix) ->
+get_start_and_end_positions(AcceptableStarts, Matrix) ->
     Ys = lists:seq(1, tuple_size(Matrix)),
-    get_start_and_end_positions_(Matrix, Ys, #{}).
+    get_start_and_end_positions_(AcceptableStarts, Matrix, Ys, #{}).
 
-get_start_and_end_positions_(Matrix, [Y | NextYs], Acc) ->
+get_start_and_end_positions_(AcceptableStarts, Matrix, [Y | NextYs], Acc) ->
     Row = element(Y, Matrix),
     Xs = lists:seq(1, tuple_size(Row)),
-    UpdatedAcc = get_start_and_end_positions__(Row, Y, Xs, Acc),
-    get_start_and_end_positions_(Matrix, NextYs, UpdatedAcc);
-get_start_and_end_positions_(_Matrix, [], Acc) ->
+    UpdatedAcc = get_start_and_end_positions__(AcceptableStarts, Row, Y, Xs, Acc),
+    get_start_and_end_positions_(AcceptableStarts, Matrix, NextYs, UpdatedAcc);
+get_start_and_end_positions_(_AcceptableStarts, _Matrix, [], Acc) ->
     Acc.
 
-get_start_and_end_positions__(Row, Y, [X | NextXs], Acc) ->
-    case element(X, Row) of
-        StartOrEnd when StartOrEnd =:= start; StartOrEnd =:= 'end' ->
-            UpdatedAcc = Acc#{StartOrEnd => {X, Y}},
-            get_start_and_end_positions__(Row, Y, NextXs, UpdatedAcc);
-        _ ->
-            get_start_and_end_positions__(Row, Y, NextXs, Acc)
+get_start_and_end_positions__(AcceptableStarts, Row, Y, [X | NextXs], Acc) ->
+    Cell = element(X, Row),
+    case lists:member(Cell, AcceptableStarts) of
+        true ->
+            UpdatedAcc = maps_prepend(start, {X, Y}, Acc),
+            get_start_and_end_positions__(AcceptableStarts, Row, Y, NextXs, UpdatedAcc);
+        false when Cell =:= 'end' ->
+            UpdatedAcc = Acc#{Cell => [{X, Y}]},
+            get_start_and_end_positions__(AcceptableStarts, Row, Y, NextXs, UpdatedAcc);
+        false ->
+            get_start_and_end_positions__(AcceptableStarts, Row, Y, NextXs, Acc)
     end;
-get_start_and_end_positions__(_Row, _Y, [], Acc) ->
+get_start_and_end_positions__(_AcceptableStarts, _Row, _Y, [], Acc) ->
     Acc.
+
+maps_prepend(K, V, M) ->
+    maps:update_with(K,
+                     fun (L) -> [V | L] end,
+                     [V],
+                     M).
 
 build_graph(Graph, Matrix) ->
     VertexPerPos = build_graph_vertices(Graph, Matrix),
@@ -154,8 +189,8 @@ height_diff('end' = _NeighCell, Cell) ->
     height_diff(25, Cell);
 height_diff(_NeighCell, 'end' = _Cell) ->
     infinity;
-height_diff(start = _NeighCell, _Cell) ->
-    infinity;
+height_diff(start = _NeighCell, Cell) ->
+    height_diff(0, Cell);
 height_diff(NeighCell, start = _Cell) ->
     height_diff(NeighCell, 0);
 height_diff(NeighCell, Cell) ->
