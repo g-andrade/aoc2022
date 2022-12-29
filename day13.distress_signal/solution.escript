@@ -2,13 +2,15 @@
 -mode(compile).
 
 main(["part1"]) ->
-    do().
+    do_part1();
+main(["part2"]) ->
+    do_part2().
 
-do() ->
-    do_recur(_Index = 1, _Sum = 0).
+do_part1() ->
+    do_part1_recur(_Index = 1, _Sum = 0).
 
-do_recur(Index, Sum) ->
-    case get_packets() of
+do_part1_recur(Index, Sum) ->
+    case get_packet_pair() of
         finished ->
             log("Sum: ~p", [Sum]);
         {PacketA, PacketB} ->
@@ -21,10 +23,38 @@ do_recur(Index, Sum) ->
                           % log("Packets ~b in order, prev sum ~b", [Index, Sum]),
                           Sum + Index
                   end,
-            do_recur(Index + 1, UpdatedSum)
+            do_part1_recur(Index + 1, UpdatedSum)
     end.
 
-get_packets() ->
+do_part2() ->
+    DividerPackets = divider_packets(),
+    Packets = DividerPackets ++ get_all_packets(),
+    SortedPackets = lists:sort(fun (A, B) -> compare_packets(A, B) =/= gt end, Packets),
+    EnumeratedSortedPackets = lists:enumerate(SortedPackets),
+    MultipliedIndices
+        = lists:foldl(
+            fun (Divider, Acc) ->
+                    {Index, _} = lists:keyfind(Divider, 2, EnumeratedSortedPackets),
+                    log("Index of divider ~p is ~b", [Divider, Index]),
+                    Acc * Index
+            end,
+            _Acc0 = 1,
+            DividerPackets),
+
+    log("Multiplied indices of divider packets: ~b", [MultipliedIndices]).
+
+divider_packets() ->
+    [[[2]], [[6]]].
+
+get_all_packets() ->
+    case get_packet_pair() of
+        {PacketA, PacketB} ->
+            [PacketA, PacketB | get_all_packets()];
+        finished ->
+            []
+    end.
+
+get_packet_pair() ->
     case io:get_line("") of
         eof ->
             finished;
