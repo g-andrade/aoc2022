@@ -8,17 +8,22 @@
 
 -type pos() :: {X :: integer(), Y :: integer()}.
 
-main(["part1"]) ->
-    do_part1().
+-define(SAND_FROM, ({500, 0})).
 
-do_part1() ->
+main(["part1"]) ->
+    do(_HasBottom = false);
+main(["part2"]) ->
+    do(_HasBottom = true).
+
+do(HasBottom) ->
     RockLines = get_rock_lines(),
     log("Got rock lines: ~p", [RockLines]),
 
-    InitialCave = initial_cave(RockLines),
+    InitialCave = initial_cave(HasBottom, RockLines),
     log("Initial cave: ~p", [InitialCave]),
 
-    SandUnitsUntilFull = pour_sand_until_full(_From = {500,0}, InitialCave),
+    ExtraCount = if HasBottom -> 1; not HasBottom -> 0 end,
+    SandUnitsUntilFull = pour_sand_until_full(_From = ?SAND_FROM, InitialCave) + ExtraCount,
     log("Units of sand that pour until full: ~b", [SandUnitsUntilFull]).
 
 get_rock_lines() ->
@@ -37,21 +42,32 @@ parse_rock_lines(Line) ->
             [{X, Y}]
     end.
 
-initial_cave(RockLines) ->
-    {Grid, MaxY} = initial_cave_recur(RockLines, _GridAcc0 = [], _MaxY = 0),
+initial_cave(HasBottom, RockLines) ->
+    {Grid, MaxY} = initial_cave_recur(RockLines, HasBottom, _GridAcc0 = [], _MaxY = 0),
     #cave{grid = Grid, max_y = MaxY}.
 
-initial_cave_recur([RockLine | Next], GridAcc, MaxY) ->
+initial_cave_recur([RockLine | Next], HasBottom, GridAcc, MaxY) ->
     {UpdatedGridAcc, UpdatedMinY} = initial_cave_for_rock_line(RockLine, GridAcc, MaxY),
-    initial_cave_recur(Next, UpdatedGridAcc, UpdatedMinY);
-initial_cave_recur([], GridAcc, MaxY) ->
-    {sets:from_list(GridAcc, [{version, 2}]), MaxY}.
+    initial_cave_recur(Next, HasBottom, UpdatedGridAcc, UpdatedMinY);
+initial_cave_recur([], HasBottom, GridAcc, MaxY) ->
+    {UpdatedGridAcc, UpdatedMaxY} = maybe_have_cave_bottom(HasBottom, GridAcc, MaxY),
+    {sets:from_list(UpdatedGridAcc, [{version, 2}]), UpdatedMaxY}.
 
 initial_cave_for_rock_line([From | [To | _] = Next], GridAcc, MaxY) ->
     {UpdatedGridAcc, UpdatedMinY} = draw_rock_line(From, To, GridAcc, MaxY),
     initial_cave_for_rock_line(Next, UpdatedGridAcc, UpdatedMinY);
 initial_cave_for_rock_line([_], GridAcc, MaxY) ->
     {GridAcc, MaxY}.
+
+maybe_have_cave_bottom(HasBottom, GridAcc, MaxY) ->
+    case HasBottom of
+        false ->
+            {GridAcc, MaxY};
+        true ->
+            UpdatedMaxY = MaxY + 2,
+            UpdatedGridAcc = [{X, UpdatedMaxY} || X <- lists:seq(-10000, 10000)] ++ GridAcc, % hackish but good enough
+            {UpdatedGridAcc, UpdatedMaxY}
+    end.
 
 draw_rock_line({X, Y1}, {X, Y2}, GridAcc, MaxY) ->
     LineMinY = min(Y1, Y2),
@@ -82,6 +98,8 @@ pour_sand({SandX, SandY}, Cave) ->
     of
         [NewSandX | _] ->
             pour_sand({NewSandX, NewSandY}, Cave);
+        [] when {SandX, SandY} =:= ?SAND_FROM ->
+            full;
         [] ->
             UpdatedGrid = sets:add_element({SandX, SandY}, Cave#cave.grid),
             {resting, Cave#cave{grid = UpdatedGrid}}
