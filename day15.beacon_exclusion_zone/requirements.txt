@@ -1,0 +1,2 @@
+Pyqtree>=1.0,<2.0
+multiprocess==0.70.14 
